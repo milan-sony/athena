@@ -2,6 +2,7 @@
 
 import fs from "node:fs"
 import dotenv from "dotenv"
+import { GoogleGenAI } from "@google/genai";
 
 // Config .env
 dotenv.config()
@@ -12,41 +13,37 @@ const imageToText = async (image) => {
         return { error: "No image found!" }
     }
 
-    const geminiRes = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
-        {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                contents: [
-                    {
-                        parts: [
-                            {
-                                text:
-                                    "You are ATHENA, an AI assistant for elderly and visually impaired users. " +
-                                    "Describe the image clearly and simply in one or two short sentences. " +
-                                    "Prioritize safety, obstacles, people, and notable items. Avoid speculation. " +
-                                    "Avoid technical terms, be friendly, and sound natural, like speaking to a companion.",
-                            },
-                            { inlineData: { data: image, mimeType: "image/jpeg" } },
-                        ],
-                    },
-                ],
-                generationConfig: { temperature: 0.5, maxOutputTokens: 150 },
-            }),
-        }
-    )
+    try {
+        const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+        const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: [
+                {
+                    parts: [
+                        {
+                            text: "You are ATHENA, an AI assistant for elderly and visually impaired users. " +
+                                "Describe the image clearly and simply in one or two short sentences. " +
+                                "Prioritize safety, obstacles, people, and notable items. Avoid speculation. " +
+                                "Avoid technical terms, be friendly, and sound natural, like speaking to a companion."
+                        },
+                        {
+                            inlineData: {
+                                mimeType: "image/jpeg",
+                                data: image
+                            }
+                        }
+                    ]
+                }
+            ]
+        });
 
-    if (!geminiRes.ok) throw new Error("Gemini: " + (await geminiRes.text()))
-    const geminiData = await geminiRes.json()
-
-    const description =
-        (geminiData?.candidates?.[0]?.content?.parts || [])
-            .map((p) => p.text || "")
-            .join(" ")
-            .trim() || "I could not describe the image."
-
-    return description
+        const candidate = response.candidates?.[0];
+        const text = candidate?.content?.parts?.[0]?.text;
+        
+        return text || "I could not describe the image.";
+    } catch (error) {
+        throw new Error("Gemini: " + error.message);
+    }
 }
 
 // Image to text and speech
